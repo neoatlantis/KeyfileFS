@@ -6,8 +6,15 @@ import os
 import sys
 import errno
 import re
+import hashlib
 
 from fuse import FUSE, FuseOSError, Operations
+
+from .fs_config import KeyfileFSConfig
+from .fs_keyfiles import KeyfileFSKeyfiles
+from .constants import *
+
+
 
 
 
@@ -37,29 +44,35 @@ class STAT_PERMISSIONS:
 
 
 
-class Passthrough(Operations):
-    def __init__(self):
+class KeyfileFSOperations(Operations):
+
+    def __init__(self, secret, salts):
         self.uid = os.getuid()
         self.gid = os.getgid()
 
-        self.entries = [
-            "example-1",
-            "example-2",
-        ]
+        self.secret = secret
+        self.salts = salts
+
+        self.modules = {
+            "config":   KeyfileFSConfig(),
+            "keyfiles": KeyfileFSKeyfiles(self),
+        }
+
+        self.released = False # if keyfile is released for reading
+
+    def setRelease(self, released):
+        self.released = released
+
 
     def _split_path(self, path):
         dirname = os.path.dirname(path)
         basename = os.path.basename(path)
-        if basename and not re.match("^[0-9a-zA-Z_\\-\\.]{1,256}$", basename):
+        if basename and not re.match(REGEX_FILENAME_RULE, basename):
             raise FuseOSError(errno.EINVAL)
-        if dirname and dirname not in ["/", "/config"]:
+        if dirname and not (dirname == "/" or dirname[1:] in self.modules):
             raise FuseOSError(errno.EACCES)
         return dirname, basename
 
-
-
-    # Filesystem methods
-    # ==================
 
     def access(self, path, mode):
         dirname, basename = self._split_path(path)
@@ -73,9 +86,15 @@ class Passthrough(Operations):
     def link(self, target, name): raise FuseOSError(errno.EPERM)
     def chmod(self, path, mode): raise FuseOSError(errno.EPERM)
     def chown(self, path, uid, gid): raise FuseOSError(errno.EPERM)
+    def unlink(self, path): raise FuseOSError(errno.EPERM)
+    def rename(self, old, new): raise FuseOSError(errno.EPERM)
+    def write(self, path, buf, offset, fh): raise FuseOSError(errno.EPERM)
+    def truncate(self, path, length, fh=None): raise FuseOSError(errno.EPERM)
+    def statfs(self, path): raise FuseOSError(errno.EACCES)
+
 
     def getattr(self, path, fh=None):
-        print("getattr", path, fh)
+        dirname, basename = self._split_path(path)
         attr = {
             "st_ctime": 0,
             "st_atime": 0,
@@ -84,15 +103,26 @@ class Passthrough(Operations):
             "st_gid"  : self.gid,
             "st_mode" : 0,
             "st_nlink": 1,
-            "st_size" : 0,
+            "st_size" : 1,
         }
-        if path == "/config" or path == "/":
-            attr["st_mode"] = STAT_FILETYPE.IFDIR | 0o700
-            return attr
+        dirname = dirname[1:]
+        print("getattr", "path=", path, "dirname=", dirname, "basename=", basename)
 
-        attr["st_mode"] = STAT_FILETYPE.IFREG | 0o600
-        attr["st_size"] = 64
+        if dirname == "": #  "/" actually
+            if basename != "" and basename in self.modules:
+                attr["st_mode"] = STAT_FILETYPE.IFDIR | 0o700
+            elif basename == "":
+                attr["st_mode"] = STAT_FILETYPE.IFDIR | 0o700
+            else:
+                raise FuseOSError(errno.ENOENT)
+        elif dirname in self.modules:
+            attr["st_mode"] = STAT_FILETYPE.IFREG | 0o600
+            updates = self.modules[dirname].getattr(basename)
+            for each in updates: attr[each] = updates[each]
+        else:
+            raise FuseOSError(errno.EPERM)
 
+        #print(attr)
         return attr
 
     def readdir(self, path, fh):
@@ -100,32 +130,19 @@ class Passthrough(Operations):
         print("readdir", path, fh)
         yield "."
         yield ".."
+        
         if path == "/":
-            yield "config"
-            for each in self.entries: yield each
+            for each in self.modules: # subdir: config/, keyfiles/
+                yield each
         else:
-            yield "option-1"
-            yield "option-2"
+            if dirname == "/" and basename in self.modules:
+                for each in self.modules[basename].readdir():
+                    yield each
+            else:
+                raise FuseOSError(errno.EPERM)
 
 
-    def statfs(self, path):
-        print("statfs", path)
-        raise FuseOSError(errno.EACCES)
-        """return dict((key, getattr(stv, key)) for key in ('f_bavail', 'f_bfree',
-            'f_blocks', 'f_bsize', 'f_favail', 'f_ffree', 'f_files', 'f_flag',
-            'f_frsize', 'f_namemax'))"""
 
-    def unlink(self, path):
-        print("unlink", path)
-        dirname = os.path.dirname(path)
-        basename = os.path.basename(path)
-        if dirname != "/" or basename not in self.entries:
-            raise FuseOSError(errno.EACCES)
-
-
-    def rename(self, old, new):
-        print("rename", old, new)
-#        return os.rename(self._full_path(old), self._full_path(new))
 
         
 
@@ -136,65 +153,45 @@ class Passthrough(Operations):
     # File methods
     # ============
 
-    def open(self, path, flags):
-        dirname, basename = self._split_path(path)
-        _flags = flags
-        flags = [
-            e for e in [
-                s for s in dir(os) if s.startswith("O_")
-            ]
-            if getattr(os, e) & flags
-        ]
-        print("open", path, "%o" % _flags, flags)
-
-        #if not basename in self.entries:
-        #    raise FuseOSError(errno.ENOENT)
-
-        #full_path = self._full_path(path)
-        #return os.open(full_path, flags)
-        return 3
-
-    def create(self, path, mode, fi=None):
-        return
-        dirname, basename = self._split_path(path)
-        print("create", path, mode, fi)
-
-        if dirname != "/": raise FuseOSError(errno.EACCES)
-        if basename == "config" or basename in self.entries:
-            raise FuseOSError(errno.EEXIST)
-        self.entries.append(basename)
+    def open(self, path, flags): return 0
+    def create(self, path, mode, fi=None): return 0
 
 
     def read(self, path, length, offset, fh):
         print("read", path, length, offset, fh)
-        return b"0" * length
+        dirname, basename = self._split_path(path)
+        if dirname[1:] in self.modules:
+            if not self.released:
+                raise FuseOSError(errno.EPERM)
+            return self.modules[dirname[1:]].read(basename, length, offset)
+        raise FuseOSError(errno.ENOENT)
 
-    def write(self, path, buf, offset, fh):
-        #if path != "/config": raise FuseOSError(errno.EACCES)
-        print("write", path, buf, offset, fh)
-        return len(buf)
 
-    def truncate(self, path, length, fh=None):
-        print("truncate", path, length)
-        #if path != "/config": raise FuseOSError(errno.EACCES)
 
     def flush(self, path, fh):
         print("flush", path, fh)
         return
-        return os.fsync(fh)
 
     def release(self, path, fh):
         print("release", path, fh)
         return True
-        return os.close(fh)
 
     def fsync(self, path, fdatasync, fh):
         print("fsync", path, fdatasync, fh)
-        return self.flush(path, fh)
+        return
 
 
-def main(mountpoint):
-    FUSE(Passthrough(), mountpoint, nothreads=True, foreground=True)
+def mountKeyfileFS(mountpoint, secret, salts, nothreads=True, foreground=True):
+    operations = KeyfileFSOperations(
+        secret=secret,
+        salts=salts,
+    )
+    FUSE(operations, mountpoint, nothreads=nothreads, foreground=foreground)
+    return operations
 
 if __name__ == '__main__':
-    main(sys.argv[1])
+    mountKeyfileFS(
+        mountpoint=sys.argv[1],
+        secret=b"abc",
+        saltProvider=["file-1", "file-2"],
+    )
