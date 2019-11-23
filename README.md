@@ -1,11 +1,11 @@
 KeyfileFS
 =========
 
-KeyfileFS is a weird FUSE filesystem. It generates deterministic keyfiles
-for TrueCrypt/VeraCrypt, KeepassX or any such crypto applications. All you
-need is to load this program with some credentials(passwords, a main keyfile,
-or special smartcards), telling it where to save the salts(as a single .csv
-file), and that's it!
+KeyfileFS is a weird FUSE filesystem. It generates deterministic keyfiles for
+TrueCrypt/VeraCrypt, KeepassX or any such crypto applications. All you need is
+to load this program with some credentials(passwords, a main keyfile, or
+special smartcards), telling it where to find the salts(currently only from a
+directory structure), and that's it!
 
 ## Why do I need this?
 
