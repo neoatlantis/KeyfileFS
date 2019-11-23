@@ -58,18 +58,19 @@ parser.add_argument("mountpoint", help="""
 The (empty) directory for mounting this filesystem.
 """)
 
-parser.add_argument("--map", "-m", required=True, help="""
+parser.add_argument("--map", "-m", help="""
 The directory being mapped to keyfiles.
 """)
 
-parser.add_argument("--keyfile", "-k", required=True, help="""
+parser.add_argument("--keyfile", "-k", help="""
 The master keyfile. All keyfiles will be derived from this.
 """)
 
 
 args = parser.parse_args()
 
-args.keyfile = os.path.realpath(args.keyfile)
+if args.keyfile:
+    args.keyfile = os.path.realpath(args.keyfile)
 
 ##############################################################################
 
@@ -92,8 +93,10 @@ if not disallow_swap():
     print("Failed securing memory. Exit.")
     exit(1)
 
-gui.onChooseKeyfile(args.keyfile)
-gui.onChooseMapDirectory(args.map)
+if args.keyfile:
+    gui.onChooseKeyfile(args.keyfile)
+if args.map:
+    gui.onChooseMapDirectory(args.map)
 
 with gui:
     pass

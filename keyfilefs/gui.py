@@ -19,12 +19,9 @@ class GUI:
 
         self.__initWidgets()
 
-        self.keyfileVar.set(fs.keyfile)
-        self.directoryVar.set(fs.directory)
-
-
     def __initWidgets(self):
-
+        self.root.title("KeyfileFS")
+        self.root.resizable(False, False)
 
         lbl1 = Label(self.root, text="Mount path:")
         lbl1.grid(row=0, column=0, sticky=E)

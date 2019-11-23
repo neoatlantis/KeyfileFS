@@ -45,7 +45,7 @@ class STAT_PERMISSIONS:
 def calculateMasterSecret(filepath):
     digester = hashlib.sha512()
     with open(filepath, "rb") as f:
-        for i in range(0, 64):
+        for i in range(0, 16):
             data = f.read(65536)
             if data:
                 digester.update(data)
@@ -64,7 +64,6 @@ class KeyfileFSOperations(Operations):
         self.directory = ""
         self.saltsFromDirectory = []
         self.secret = b""
-        self.keyfile = ""
 
         self.modules = {
             "config":   KeyfileFSConfig(),
@@ -85,8 +84,12 @@ class KeyfileFSOperations(Operations):
         self.directory = directory
         self.modules["keyfiles"].updateSalts()
 
+    def setSecret(self, secret):
+        # Sets the secret directly.
+        self.secret = secret
+
     def setKeyfile(self, keyfile):
-        self.keyfile = keyfile
+        # Sets the secret from a given master keyfile
         self.secret = calculateMasterSecret(keyfile)
 
     def setRelease(self, released):
