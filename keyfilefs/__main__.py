@@ -43,9 +43,10 @@ import threading
 import argparse
 import subprocess
 
-from .fs import mountKeyfileFS
+from .fs import KeyfileFSOperations, mountKeyfileFS
 from .constants import *
 from .gui import GUI
+from .sectools import *
 
 
 parser = argparse.ArgumentParser(
@@ -68,32 +69,33 @@ The master keyfile. All keyfiles will be derived from this.
 
 args = parser.parse_args()
 
+args.keyfile = os.path.realpath(args.keyfile)
+
 ##############################################################################
 
 
-salts = os.listdir(args.map)
-salts = [
-    e
-    for e in salts
-    if os.path.isfile(os.path.join(args.map, e)) and \
-        re.match(REGEX_FILENAME_RULE, e)
-]
 
 
-keyfileFS = None
+keyfileFS = KeyfileFSOperations()
 
-def FSThread():
-    global keyfileFS
-    keyfileFS = mountKeyfileFS(
-        mountpoint=args.mountpoint,
-        secret=open(args.keyfile, "rb").read(),
-        salts=salts
-    )
-
-fst = threading.Thread(target=FSThread)
+fst = threading.Thread(
+    target=mountKeyfileFS,
+    args=(keyfileFS, args.mountpoint)
+)
 fst.start()
 
-with GUI(mountpoint=args.mountpoint, fs=keyfileFS) as gui:
+
+
+gui = GUI(mountpoint=args.mountpoint, fs=keyfileFS)
+
+if not disallow_swap():
+    print("Failed securing memory. Exit.")
+    exit(1)
+
+gui.onChooseKeyfile(args.keyfile)
+gui.onChooseMapDirectory(args.map)
+
+with gui:
     pass
 
 print("Bye.")

@@ -13,11 +13,15 @@ from .constants import *
 class KeyfileFSKeyfiles:
 
     def __init__(self, parent):
+        self.parent = parent
         def pbkdfGen(salt, length=512):
             return hashlib.pbkdf2_hmac(
                 "sha512", parent.secret, salt, 100, length)
         self.PBKDF = pbkdfGen
-        self.salts = parent.salts
+        self.updateSalts()
+        
+    def updateSalts(self):
+        self.salts = self.parent.saltsFromDirectory
 
     def readdir(self):
         for each in self.salts:

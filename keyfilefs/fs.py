@@ -42,16 +42,29 @@ class STAT_PERMISSIONS:
     O_X = 0o001
 
 
+def calculateMasterSecret(filepath):
+    digester = hashlib.sha512()
+    with open(filepath, "rb") as f:
+        for i in range(0, 64):
+            data = f.read(65536)
+            if data:
+                digester.update(data)
+            else:
+                break
+    return digester.digest()
+
 
 
 class KeyfileFSOperations(Operations):
 
-    def __init__(self, secret, salts):
+    def __init__(self):
         self.uid = os.getuid()
         self.gid = os.getgid()
 
-        self.secret = secret
-        self.salts = salts
+        self.directory = ""
+        self.saltsFromDirectory = []
+        self.secret = b""
+        self.keyfile = ""
 
         self.modules = {
             "config":   KeyfileFSConfig(),
@@ -60,9 +73,24 @@ class KeyfileFSOperations(Operations):
 
         self.released = False # if keyfile is released for reading
 
+    def setSaltsFromDirectory(self, directory):
+        salts = os.listdir(directory)
+        salts = [
+            e
+            for e in salts
+            if os.path.isfile(os.path.join(directory, e)) and \
+                re.match(REGEX_FILENAME_RULE, e)
+        ]
+        self.saltsFromDirectory = salts
+        self.directory = directory
+        self.modules["keyfiles"].updateSalts()
+
+    def setKeyfile(self, keyfile):
+        self.keyfile = keyfile
+        self.secret = calculateMasterSecret(keyfile)
+
     def setRelease(self, released):
         self.released = released
-
 
     def _split_path(self, path):
         dirname = os.path.dirname(path)
@@ -181,11 +209,8 @@ class KeyfileFSOperations(Operations):
         return
 
 
-def mountKeyfileFS(mountpoint, secret, salts, nothreads=True, foreground=True):
-    operations = KeyfileFSOperations(
-        secret=secret,
-        salts=salts,
-    )
+def mountKeyfileFS(operations, mountpoint, nothreads=True, foreground=True):
+    assert isinstance(operations, KeyfileFSOperations)
     FUSE(operations, mountpoint, nothreads=nothreads, foreground=foreground)
     return operations
 
