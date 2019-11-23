@@ -61,7 +61,6 @@ class KeyfileFSOperations(Operations):
         self.uid = os.getuid()
         self.gid = os.getgid()
 
-        self.directory = ""
         self.saltsFromDirectory = []
         self.secret = b""
 
@@ -81,7 +80,6 @@ class KeyfileFSOperations(Operations):
                 re.match(REGEX_FILENAME_RULE, e)
         ]
         self.saltsFromDirectory = salts
-        self.directory = directory
         self.modules["keyfiles"].updateSalts()
 
     def setSecret(self, secret):
