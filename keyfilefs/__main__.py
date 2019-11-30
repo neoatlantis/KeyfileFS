@@ -45,7 +45,7 @@ import subprocess
 
 from .fs import KeyfileFSOperations, mountKeyfileFS
 from .constants import *
-from .gui import GUI
+from .gui import GUI, GUIPlugin
 from .sectools import *
 
 
@@ -74,7 +74,17 @@ if args.keyfile:
 
 ##############################################################################
 
+from tkinter import *
 
+class CustomizedInputField(GUIPlugin):
+
+    def __init__(self, root, *args):
+        GUIPlugin.__init__(self, master=root, height=20, bd=1, relief=SUNKEN)
+        self.l = Label(self, text="KeyfileFS, authored by NeoAtlantis. Here demonstrates a plugin for customing secret input.")
+        self.l.grid(row=0, column=0)
+
+    def onSecretGenerated(self, callback):
+        pass
 
 
 keyfileFS = KeyfileFSOperations()
@@ -87,7 +97,7 @@ fst.start()
 
 
 
-gui = GUI(mountpoint=args.mountpoint, fs=keyfileFS)
+gui = GUI(mountpoint=args.mountpoint, fs=keyfileFS, plugin=CustomizedInputField)
 
 if not disallow_swap():
     print("Failed securing memory. Exit.")

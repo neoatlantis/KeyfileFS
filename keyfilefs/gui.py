@@ -6,9 +6,20 @@ from tkinter import *
 import tkinter.filedialog as filedialog
 
 
+class GUIPlugin(Frame):
+    
+    def onSecretGenerated(self, callback):
+        # User needs to:
+        #  o record this callback.
+        #  o if the plugin has determined a secret, call the callback func to
+        #    inform GUI on its existance.
+        raise NotImplementedError("Must override this method.")
+
+
+
 class GUI:
 
-    def __init__(self, mountpoint, fs):
+    def __init__(self, mountpoint, fs, plugin=None):
         self.fs = fs
         self.mountpoint = mountpoint
         self.root = Tk()
@@ -17,23 +28,24 @@ class GUI:
         self.keyfileVar = StringVar()
         self.directoryVar = StringVar()
 
-        self.__initWidgets()
+        self.__initWidgets(plugin=plugin)
 
-    def __initWidgets(self):
+    def __initWidgets(self, plugin=None):
         self.root.title("KeyfileFS")
         self.root.resizable(False, False)
 
+        row = 0 #--------
+
         lbl1 = Label(self.root, text="Mount path:")
-        lbl1.grid(row=0, column=0, sticky=E)
-
-        lbl2 = Label(self.root, text="Master key file:")
-        lbl2.grid(row=1, column=0, sticky=E)
-
-        lbl3 = Label(self.root, text="Directory being mapped:")
-        lbl3.grid(row=2, column=0, sticky=E)
+        lbl1.grid(row=row, column=0, sticky=E)
 
         lblPath = Label(self.root, text=self.mountpoint, anchor=W)
-        lblPath.grid(row=0, column=1, columnspan=3, sticky=W)
+        lblPath.grid(row=row, column=1, columnspan=3, sticky=W)
+
+        row += 1 # --------
+
+        lbl2 = Label(self.root, text="Master key file:")
+        lbl2.grid(row=row, column=0, sticky=E)
 
         txtKeyfile = Entry(
             self.root,
@@ -41,7 +53,19 @@ class GUI:
             textvariable=self.keyfileVar,
             width=50
         )
-        txtKeyfile.grid(row=1, column=1, columnspan=2)
+        txtKeyfile.grid(row=row, column=1, columnspan=2)
+
+        btnKeyfile = Button(
+            self.root,
+            text="Browse...",
+            command=self.onChooseKeyfile,
+        )
+        btnKeyfile.grid(row=row, column=3)
+
+        row += 1 # --------
+
+        lbl3 = Label(self.root, text="Directory being mapped:")
+        lbl3.grid(row=row, column=0, sticky=E)
 
         txtDirectory = Entry(
             self.root,
@@ -49,43 +73,48 @@ class GUI:
             textvariable=self.directoryVar,
             width=50
         )
-        txtDirectory.grid(row=2, column=1, columnspan=2)
-
-        btnKeyfile = Button(
-            self.root,
-            text="Browse...",
-            command=self.onChooseKeyfile,
-        )
-        btnKeyfile.grid(row=1, column=3)
+        txtDirectory.grid(row=row, column=1, columnspan=2)
 
         btnDirectory = Button(
             self.root,
             text="Browse...",
             command=self.onChooseMapDirectory
         )
-        btnDirectory.grid(row=2, column=3)
+        btnDirectory.grid(row=row, column=3)
+
+        if plugin: # --------
+            #assert isinstance(plugin, GUIPlugin)
+            row += 1
+            print(row)
+            self.plugin = plugin(self.root)
+            self.plugin.grid(row=row, column=0, columnspan=4, sticky=W+E)
+            self.plugin.onSecretGenerated(self.onPluginSecret)
+
+        row += 1 # --------
 
         self.accessStatusVar = StringVar()
-
         self.txtAccess = Entry(
             self.root,
             state="disabled",
             textvariable=self.accessStatusVar,
             justify=CENTER,
         )
-        self.txtAccess.grid(row=3, column=0, columnspan=4, sticky=W+E)
+        self.txtAccess.grid(row=row, column=0, columnspan=4, sticky=W+E)
+
+        row += 1 # --------
 
         self.btnRelease = Button(
             self.root,
             text="Allow Access",
             command=self.toggleAccess
         )
-        self.btnRelease.grid(row=4, column=0, columnspan=2, sticky=W+E)
+        self.btnRelease.grid(row=row, column=0, columnspan=2, sticky=W+E)
 
         self.toggleAccess()
 
         btnExit = Button(self.root, text="Exit", command=self.onExit)
-        btnExit.grid(row=4, column=2, columnspan=2, sticky=W+E)
+        btnExit.grid(row=row, column=2, columnspan=2, sticky=W+E)
+
 
 
     def toggleAccess(self):
@@ -117,6 +146,9 @@ class GUI:
 
     def __exit__(self, *args, **kvargs):
         subprocess.run(["fusermount", "-u", self.mountpoint])
+
+    def onPluginSecret(self, secret):
+        self.fs.setSecret(secret)
 
     def onChooseKeyfile(self, filename=None):
         if not filename:

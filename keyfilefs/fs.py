@@ -62,6 +62,9 @@ class KeyfileFSOperations(Operations):
         self.gid = os.getgid()
 
         self.saltsFromDirectory = []
+
+        self._secretRaw = b""
+        self._secretKeyfile = b""
         self.secret = b""
 
         self.modules = {
@@ -70,6 +73,10 @@ class KeyfileFSOperations(Operations):
         }
 
         self.released = False # if keyfile is released for reading
+
+    def _updateSecret(self):
+        self.secret = hashlib.sha512(
+            self._secretRaw + self._secretKeyfile).digest()
 
     def setSaltsFromDirectory(self, directory):
         salts = os.listdir(directory)
@@ -84,11 +91,13 @@ class KeyfileFSOperations(Operations):
 
     def setSecret(self, secret):
         # Sets the secret directly.
-        self.secret = secret
+        self._secretRaw = secret
+        self._updateSecret()
 
     def setKeyfile(self, keyfile):
         # Sets the secret from a given master keyfile
-        self.secret = calculateMasterSecret(keyfile)
+        self._secretKeyfile = calculateMasterSecret(keyfile)
+        self._updateSecret()
 
     def setRelease(self, released):
         self.released = released
